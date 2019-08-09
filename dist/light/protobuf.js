@@ -1,6 +1,6 @@
 /*!
  * protobuf.js v6.8.8 (c) 2016, daniel wirtz
- * compiled thu, 19 jul 2018 00:33:25 utc
+ * compiled thu, 08 aug 2019 10:03:40 utc
  * licensed under the bsd-3-clause license
  * see: https://github.com/dcodeio/protobuf.js for details
  */
@@ -1169,15 +1169,18 @@ function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
             case "int64":
             case "sint64":
             case "fixed64":
-            case "sfixed64": gen
-                ("if(util.Long)")
-                    ("(m%s=util.Long.fromValue(d%s)).unsigned=%j", prop, prop, isUnsigned)
-                ("else if(typeof d%s===\"string\")", prop)
-                    ("m%s=parseInt(d%s,10)", prop, prop)
-                ("else if(typeof d%s===\"number\")", prop)
-                    ("m%s=d%s", prop, prop)
-                ("else if(typeof d%s===\"object\")", prop)
-                    ("m%s=new util.LongBits(d%s.low>>>0,d%s.high>>>0).toNumber(%s)", prop, prop, prop, isUnsigned ? "true" : "");
+            case "sfixed64":
+                if (field.options && field.options.jstype === "JS_STRING") gen
+                    ("m%s=String(d%s)", prop, prop);
+                else gen
+                    ("if(util.Long)")
+                        ("(m%s=util.Long.fromValue(d%s)).unsigned=%j", prop, prop, isUnsigned)
+                    ("else if(typeof d%s===\"string\")", prop)
+                        ("m%s=parseInt(d%s,10)", prop, prop)
+                    ("else if(typeof d%s===\"number\")", prop)
+                        ("m%s=d%s", prop, prop)
+                    ("else if(typeof d%s===\"object\")", prop)
+                        ("m%s=new util.LongBits(d%s.low>>>0,d%s.high>>>0).toNumber(%s)", prop, prop, prop, isUnsigned ? "true" : "");
                 break;
             case "bytes": gen
                 ("if(typeof d%s===\"string\")", prop)
@@ -1284,11 +1287,14 @@ function genValuePartial_toObject(gen, field, fieldIndex, prop) {
             case "sint64":
             case "fixed64":
             case "sfixed64": gen
-            ("if(typeof m%s===\"number\")", prop)
-                ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
-            ("else") // Long-like
-                ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
-                break;
+            if (field.options && field.options.jstype === "JS_STRING") gen
+                ("d%s=m%s", prop, prop);
+            else gen
+                ("if(typeof m%s===\"number\")", prop)
+                    ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
+                ("else") // Long-like
+                    ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
+            break;
             case "bytes": gen
             ("d%s=o.bytes===String?util.base64.encode(m%s,0,m%s.length):o.bytes===Array?Array.prototype.slice.call(m%s):m%s", prop, prop, prop, prop, prop);
                 break;
@@ -1349,6 +1355,8 @@ converter.toObject = function toObject(mtype) {
                 prop  = util.safeProp(field.name);
             if (field.resolvedType instanceof Enum) gen
         ("d%s=o.enums===String?%j:%j", prop, field.resolvedType.valuesById[field.typeDefault], field.typeDefault);
+            else if (field.long && field.options && field.options.jstype === "JS_STRING") gen
+        ("d%s=%j", prop, field.typeDefault);
             else if (field.long) gen
         ("if(util.Long){")
             ("var n=new util.Long(%i,%i,%j)", field.typeDefault.low, field.typeDefault.high, field.typeDefault.unsigned)
@@ -1438,7 +1446,9 @@ function decoder(mtype) {
     for (; i < /* initializes */ mtype.fieldsArray.length; ++i) {
         var field = mtype._fieldsArray[i].resolve(),
             type  = field.resolvedType instanceof Enum ? "int32" : field.type,
-            ref   = "m" + util.safeProp(field.name); gen
+            ref   = "m" + util.safeProp(field.name),
+            conv = (type === "int64" && field.options && field.options.jstype === "JS_STRING") ?
+                ".toString()" : ""; gen
             ("case %i:", field.id);
 
         // Map fields
@@ -1471,22 +1481,22 @@ function decoder(mtype) {
                 ("if((t&7)===2){")
                     ("var c2=r.uint32()+r.pos")
                     ("while(r.pos<c2)")
-                        ("%s.push(r.%s())", ref, type)
+                        ("%s.push(r.%s()%s)", ref, type, conv)
                 ("}else");
 
             // Non-packed
             if (types.basic[type] === undefined) gen(field.resolvedType.group
-                    ? "%s.push(types[%i].decode(r))"
-                    : "%s.push(types[%i].decode(r,r.uint32()))", ref, i);
+                    ? "%s.push(types[%i].decode(r)%s)"
+                    : "%s.push(types[%i].decode(r,r.uint32())%s)", ref, i, conv);
             else gen
-                    ("%s.push(r.%s())", ref, type);
+                    ("%s.push(r.%s()%s)", ref, type, conv);
 
         // Non-repeated
         } else if (types.basic[type] === undefined) gen(field.resolvedType.group
-                ? "%s=types[%i].decode(r)"
-                : "%s=types[%i].decode(r,r.uint32())", ref, i);
+                ? "%s=types[%i].decode(r)%s"
+                : "%s=types[%i].decode(r,r.uint32())%s", ref, i, conv);
         else gen
-                ("%s=r.%s()", ref, type);
+                ("%s=r.%s()%s", ref, type, conv);
         gen
                 ("break");
     // Unknown fields
@@ -1528,10 +1538,10 @@ var Enum     = require(14),
  * @returns {Codegen} Codegen instance
  * @ignore
  */
-function genTypePartial(gen, field, fieldIndex, ref) {
+function genTypePartial(gen, field, fieldIndex, conv, ref) {
     return field.resolvedType.group
-        ? gen("types[%i].encode(%s,w.uint32(%i)).uint32(%i)", fieldIndex, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0)
-        : gen("types[%i].encode(%s,w.uint32(%i).fork()).ldelim()", fieldIndex, ref, (field.id << 3 | 2) >>> 0);
+        ? gen("types[%i].encode(%s(%s),w.uint32(%i)).uint32(%i)", fieldIndex, conv, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0)
+        : gen("types[%i].encode(%s(%s),w.uint32(%i).fork()).ldelim()", fieldIndex, conv, ref, (field.id << 3 | 2) >>> 0);
 }
 
 /**
@@ -1554,13 +1564,15 @@ function encoder(mtype) {
         var field    = fields[i].resolve(),
             index    = mtype._fieldsArray.indexOf(field),
             type     = field.resolvedType instanceof Enum ? "int32" : field.type,
-            wireType = types.basic[type];
-            ref      = "m" + util.safeProp(field.name);
+            wireType = types.basic[type],
+            ref      = "m" + util.safeProp(field.name),
+            conv      = (type === "int64" && field.options && field.options.jstype === "JS_STRING") ?
+              "(util.Long?util.Long.fromString:parseInt)" : "";
 
         // Map fields
         if (field.map) {
             gen
-    ("if(%s!=null&&m.hasOwnProperty(%j)){", ref, field.name) // !== undefined && !== null
+    ("if(%s!=null&&Object.hasOwnProperty.call(m,%j)){", ref, field.name) // !== undefined && !== null
         ("for(var ks=Object.keys(%s),i=0;i<ks.length;++i){", ref)
             ("w.uint32(%i).fork().uint32(%i).%s(ks[i])", (field.id << 3 | 2) >>> 0, 8 | types.mapKey[field.keyType], field.keyType);
             if (wireType === undefined) gen
@@ -1580,7 +1592,7 @@ function encoder(mtype) {
 
         ("w.uint32(%i).fork()", (field.id << 3 | 2) >>> 0)
         ("for(var i=0;i<%s.length;++i)", ref)
-            ("w.%s(%s[i])", type, ref)
+            ("w.%s(%s(%s[i]))", type, conv, ref)
         ("w.ldelim()");
 
             // Non-packed
@@ -1588,9 +1600,9 @@ function encoder(mtype) {
 
         ("for(var i=0;i<%s.length;++i)", ref);
                 if (wireType === undefined)
-            genTypePartial(gen, field, index, ref + "[i]");
+            genTypePartial(gen, field, index, conv, ref + "[i]");
                 else gen
-            ("w.uint32(%i).%s(%s[i])", (field.id << 3 | wireType) >>> 0, type, ref);
+            ("w.uint32(%i).%s(%s(%s[i]))", (field.id << 3 | wireType) >>> 0, type, conv, ref);
 
             } gen
     ("}");
@@ -1598,12 +1610,12 @@ function encoder(mtype) {
         // Non-repeated
         } else {
             if (field.optional) gen
-    ("if(%s!=null&&m.hasOwnProperty(%j))", ref, field.name); // !== undefined && !== null
+    ("if(%s!=null&&Object.hasOwnProperty.call(m,%j))", ref, field.name); // !== undefined && !== null
 
             if (wireType === undefined)
-        genTypePartial(gen, field, index, ref);
+        genTypePartial(gen, field, index, conv, ref);
             else gen
-        ("w.uint32(%i).%s(%s)", (field.id << 3 | wireType) >>> 0, type, ref);
+        ("w.uint32(%i).%s(%s(%s))", (field.id << 3 | wireType) >>> 0, type, conv, ref);
 
         }
     }
@@ -1612,6 +1624,7 @@ function encoder(mtype) {
     ("return w");
     /* eslint-enable no-unexpected-multiline, block-scoped-var, no-redeclare */
 }
+
 },{"14":14,"32":32,"33":33}],14:[function(require,module,exports){
 "use strict";
 module.exports = Enum;
@@ -2083,7 +2096,9 @@ Field.prototype.resolve = function resolve() {
     }
 
     // convert to internal data type if necesssary
-    if (this.long) {
+    if (this.long && this.options && this.options.jstype === "JS_STRING") {
+        this.typeDefault = this.typeDefault.toString();
+    } else if (this.long) {
         this.typeDefault = util.Long.fromNumber(this.typeDefault, this.type.charAt(0) === "u");
 
         /* istanbul ignore else */
@@ -2798,7 +2813,7 @@ Namespace.arrayToJSON = arrayToJSON;
 Namespace.isReservedId = function isReservedId(reserved, id) {
     if (reserved)
         for (var i = 0; i < reserved.length; ++i)
-            if (typeof reserved[i] !== "string" && reserved[i][0] <= id && reserved[i][1] >= id)
+            if (typeof reserved[i] !== "string" && reserved[i][0] <= id && reserved[i][1] > id)
                 return true;
     return false;
 };
@@ -4125,6 +4140,16 @@ Root.prototype.load = function load(filename, options, callback) {
             throw err;
         cb(err, root);
     }
+	
+    // Bundled definition existence checking
+    function getBundledFileName(filename) {
+        var idx = filename.lastIndexOf("google/protobuf/");
+        if (idx > -1) {
+            var altname = filename.substring(idx);
+            if (altname in common) return altname; 
+        }
+        return null;
+    }
 
     // Processes a single file
     function process(filename, source) {
@@ -4140,11 +4165,11 @@ Root.prototype.load = function load(filename, options, callback) {
                     i = 0;
                 if (parsed.imports)
                     for (; i < parsed.imports.length; ++i)
-                        if (resolved = self.resolvePath(filename, parsed.imports[i]))
+                        if (resolved = (getBundledFileName(parsed.imports[i]) || self.resolvePath(filename, parsed.imports[i])))
                             fetch(resolved);
                 if (parsed.weakImports)
                     for (i = 0; i < parsed.weakImports.length; ++i)
-                        if (resolved = self.resolvePath(filename, parsed.weakImports[i]))
+                        if (resolved = (getBundledFileName(parsed.weakImports[i]) || self.resolvePath(filename, parsed.weakImports[i])))
                             fetch(resolved, true);
             }
         } catch (err) {
@@ -4156,14 +4181,6 @@ Root.prototype.load = function load(filename, options, callback) {
 
     // Fetches a single file
     function fetch(filename, weak) {
-
-        // Strip path if this file references a bundled definition
-        var idx = filename.lastIndexOf("google/protobuf/");
-        if (idx > -1) {
-            var altname = filename.substring(idx);
-            if (altname in common)
-                filename = altname;
-        }
 
         // Skip if already loaded / attempted
         if (self.files.indexOf(filename) > -1)
@@ -6393,9 +6410,13 @@ function genVerifyValue(gen, field, fieldIndex, ref) {
             case "uint64":
             case "sint64":
             case "fixed64":
-            case "sfixed64": gen
-                ("if(!util.isInteger(%s)&&!(%s&&util.isInteger(%s.low)&&util.isInteger(%s.high)))", ref, ref, ref, ref)
-                    ("return%j", invalid(field, "integer|Long"));
+            case "sfixed64":
+                if (field.options && field.options.jstype === "JS_STRING") gen
+                    ("if(!util.isString(%s))", ref)
+                        ("return%j", invalid(field, "string"));
+                else gen
+                    ("if(!util.isInteger(%s)&&!(%s&&util.isInteger(%s.low)&&util.isInteger(%s.high)))", ref, ref, ref, ref)
+                        ("return%j", invalid(field, "integer|Long"));
                 break;
             case "float":
             case "double": gen
@@ -6517,6 +6538,7 @@ function verifier(mtype) {
     ("return null");
     /* eslint-enable no-unexpected-multiline */
 }
+
 },{"14":14,"33":33}],37:[function(require,module,exports){
 "use strict";
 

@@ -285,7 +285,9 @@ Field.prototype.resolve = function resolve() {
     }
 
     // convert to internal data type if necesssary
-    if (this.long) {
+    if (this.long && this.options && this.options.jstype === "JS_STRING") {
+        this.typeDefault = this.typeDefault.toString();
+    } else if (this.long) {
         this.typeDefault = util.Long.fromNumber(this.typeDefault, this.type.charAt(0) === "u");
 
         /* istanbul ignore else */

@@ -14,10 +14,10 @@ var Enum     = require("./enum"),
  * @returns {Codegen} Codegen instance
  * @ignore
  */
-function genTypePartial(gen, field, fieldIndex, ref) {
+function genTypePartial(gen, field, fieldIndex, conv, ref) {
     return field.resolvedType.group
-        ? gen("types[%i].encode(%s,w.uint32(%i)).uint32(%i)", fieldIndex, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0)
-        : gen("types[%i].encode(%s,w.uint32(%i).fork()).ldelim()", fieldIndex, ref, (field.id << 3 | 2) >>> 0);
+        ? gen("types[%i].encode(%s(%s),w.uint32(%i)).uint32(%i)", fieldIndex, conv, ref, (field.id << 3 | 3) >>> 0, (field.id << 3 | 4) >>> 0)
+        : gen("types[%i].encode(%s(%s),w.uint32(%i).fork()).ldelim()", fieldIndex, conv, ref, (field.id << 3 | 2) >>> 0);
 }
 
 /**
@@ -40,8 +40,10 @@ function encoder(mtype) {
         var field    = fields[i].resolve(),
             index    = mtype._fieldsArray.indexOf(field),
             type     = field.resolvedType instanceof Enum ? "int32" : field.type,
-            wireType = types.basic[type];
-            ref      = "m" + util.safeProp(field.name);
+            wireType = types.basic[type],
+            ref      = "m" + util.safeProp(field.name),
+            conv      = (type === "int64" && field.options && field.options.jstype === "JS_STRING") ?
+              "(util.Long?util.Long.fromString:parseInt)" : "";
 
         // Map fields
         if (field.map) {
@@ -66,7 +68,7 @@ function encoder(mtype) {
 
         ("w.uint32(%i).fork()", (field.id << 3 | 2) >>> 0)
         ("for(var i=0;i<%s.length;++i)", ref)
-            ("w.%s(%s[i])", type, ref)
+            ("w.%s(%s(%s[i]))", type, conv, ref)
         ("w.ldelim()");
 
             // Non-packed
@@ -74,9 +76,9 @@ function encoder(mtype) {
 
         ("for(var i=0;i<%s.length;++i)", ref);
                 if (wireType === undefined)
-            genTypePartial(gen, field, index, ref + "[i]");
+            genTypePartial(gen, field, index, conv, ref + "[i]");
                 else gen
-            ("w.uint32(%i).%s(%s[i])", (field.id << 3 | wireType) >>> 0, type, ref);
+            ("w.uint32(%i).%s(%s(%s[i]))", (field.id << 3 | wireType) >>> 0, type, conv, ref);
 
             } gen
     ("}");
@@ -87,9 +89,9 @@ function encoder(mtype) {
     ("if(%s!=null&&Object.hasOwnProperty.call(m,%j))", ref, field.name); // !== undefined && !== null
 
             if (wireType === undefined)
-        genTypePartial(gen, field, index, ref);
+        genTypePartial(gen, field, index, conv, ref);
             else gen
-        ("w.uint32(%i).%s(%s)", (field.id << 3 | wireType) >>> 0, type, ref);
+        ("w.uint32(%i).%s(%s(%s))", (field.id << 3 | wireType) >>> 0, type, conv, ref);
 
         }
     }

@@ -32,7 +32,9 @@ function decoder(mtype) {
     for (; i < /* initializes */ mtype.fieldsArray.length; ++i) {
         var field = mtype._fieldsArray[i].resolve(),
             type  = field.resolvedType instanceof Enum ? "int32" : field.type,
-            ref   = "m" + util.safeProp(field.name); gen
+            ref   = "m" + util.safeProp(field.name),
+            conv = (type === "int64" && field.options && field.options.jstype === "JS_STRING") ?
+                ".toString()" : ""; gen
             ("case %i:", field.id);
 
         // Map fields
@@ -65,22 +67,22 @@ function decoder(mtype) {
                 ("if((t&7)===2){")
                     ("var c2=r.uint32()+r.pos")
                     ("while(r.pos<c2)")
-                        ("%s.push(r.%s())", ref, type)
+                        ("%s.push(r.%s()%s)", ref, type, conv)
                 ("}else");
 
             // Non-packed
             if (types.basic[type] === undefined) gen(field.resolvedType.group
-                    ? "%s.push(types[%i].decode(r))"
-                    : "%s.push(types[%i].decode(r,r.uint32()))", ref, i);
+                    ? "%s.push(types[%i].decode(r)%s)"
+                    : "%s.push(types[%i].decode(r,r.uint32())%s)", ref, i, conv);
             else gen
-                    ("%s.push(r.%s())", ref, type);
+                    ("%s.push(r.%s()%s)", ref, type, conv);
 
         // Non-repeated
         } else if (types.basic[type] === undefined) gen(field.resolvedType.group
-                ? "%s=types[%i].decode(r)"
-                : "%s=types[%i].decode(r,r.uint32())", ref, i);
+                ? "%s=types[%i].decode(r)%s"
+                : "%s=types[%i].decode(r,r.uint32())%s", ref, i, conv);
         else gen
-                ("%s=r.%s()", ref, type);
+                ("%s=r.%s()%s", ref, type, conv);
         gen
                 ("break");
     // Unknown fields

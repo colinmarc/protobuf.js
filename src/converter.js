@@ -58,15 +58,18 @@ function genValuePartial_fromObject(gen, field, fieldIndex, prop) {
             case "int64":
             case "sint64":
             case "fixed64":
-            case "sfixed64": gen
-                ("if(util.Long)")
-                    ("(m%s=util.Long.fromValue(d%s)).unsigned=%j", prop, prop, isUnsigned)
-                ("else if(typeof d%s===\"string\")", prop)
-                    ("m%s=parseInt(d%s,10)", prop, prop)
-                ("else if(typeof d%s===\"number\")", prop)
-                    ("m%s=d%s", prop, prop)
-                ("else if(typeof d%s===\"object\")", prop)
-                    ("m%s=new util.LongBits(d%s.low>>>0,d%s.high>>>0).toNumber(%s)", prop, prop, prop, isUnsigned ? "true" : "");
+            case "sfixed64":
+                if (field.options && field.options.jstype === "JS_STRING") gen
+                    ("m%s=String(d%s)", prop, prop);
+                else gen
+                    ("if(util.Long)")
+                        ("(m%s=util.Long.fromValue(d%s)).unsigned=%j", prop, prop, isUnsigned)
+                    ("else if(typeof d%s===\"string\")", prop)
+                        ("m%s=parseInt(d%s,10)", prop, prop)
+                    ("else if(typeof d%s===\"number\")", prop)
+                        ("m%s=d%s", prop, prop)
+                    ("else if(typeof d%s===\"object\")", prop)
+                        ("m%s=new util.LongBits(d%s.low>>>0,d%s.high>>>0).toNumber(%s)", prop, prop, prop, isUnsigned ? "true" : "");
                 break;
             case "bytes": gen
                 ("if(typeof d%s===\"string\")", prop)
@@ -173,11 +176,14 @@ function genValuePartial_toObject(gen, field, fieldIndex, prop) {
             case "sint64":
             case "fixed64":
             case "sfixed64": gen
-            ("if(typeof m%s===\"number\")", prop)
-                ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
-            ("else") // Long-like
-                ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
-                break;
+            if (field.options && field.options.jstype === "JS_STRING") gen
+                ("d%s=m%s", prop, prop);
+            else gen
+                ("if(typeof m%s===\"number\")", prop)
+                    ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
+                ("else") // Long-like
+                    ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
+            break;
             case "bytes": gen
             ("d%s=o.bytes===String?util.base64.encode(m%s,0,m%s.length):o.bytes===Array?Array.prototype.slice.call(m%s):m%s", prop, prop, prop, prop, prop);
                 break;
@@ -238,6 +244,8 @@ converter.toObject = function toObject(mtype) {
                 prop  = util.safeProp(field.name);
             if (field.resolvedType instanceof Enum) gen
         ("d%s=o.enums===String?%j:%j", prop, field.resolvedType.valuesById[field.typeDefault], field.typeDefault);
+            else if (field.long && field.options && field.options.jstype === "JS_STRING") gen
+        ("d%s=%j", prop, field.typeDefault);
             else if (field.long) gen
         ("if(util.Long){")
             ("var n=new util.Long(%i,%i,%j)", field.typeDefault.low, field.typeDefault.high, field.typeDefault.unsigned)

@@ -325,7 +325,14 @@ function toJsType(field) {
         case "sint64":
         case "fixed64":
         case "sfixed64":
-            type = config.forceLong ? "Long" : config.forceNumber ? "number" : "number|Long";
+            if (field.options && field.options.jstype === "JS_STRING")
+                type = "string";
+            else if (config.forceLong)
+                type = "Long";
+            else if (config.forceNumber)
+                type = "number";
+            else
+                type = "number|Long";
             break;
         case "bool":
             type = "boolean";
@@ -406,6 +413,8 @@ function buildType(ref, type) {
             push(escapeName(type.name) + ".prototype" + prop + " = $util.emptyArray;"); // overwritten in constructor
         else if (field.map)
             push(escapeName(type.name) + ".prototype" + prop + " = $util.emptyObject;"); // overwritten in constructor
+        else if (field.long && field.options && field.options.jstype === 'JS_STRING')
+            push(escapeName(type.name) + ".prototype" + prop + " = \"0\";");
         else if (field.long)
             push(escapeName(type.name) + ".prototype" + prop + " = $util.Long ? $util.Long.fromBits("
                     + JSON.stringify(field.typeDefault.low) + ","

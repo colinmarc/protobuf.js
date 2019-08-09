@@ -51,9 +51,13 @@ function genVerifyValue(gen, field, fieldIndex, ref) {
             case "uint64":
             case "sint64":
             case "fixed64":
-            case "sfixed64": gen
-                ("if(!util.isInteger(%s)&&!(%s&&util.isInteger(%s.low)&&util.isInteger(%s.high)))", ref, ref, ref, ref)
-                    ("return%j", invalid(field, "integer|Long"));
+            case "sfixed64":
+                if (field.options && field.options.jstype === "JS_STRING") gen
+                    ("if(!util.isString(%s))", ref)
+                        ("return%j", invalid(field, "string"));
+                else gen
+                    ("if(!util.isInteger(%s)&&!(%s&&util.isInteger(%s.low)&&util.isInteger(%s.high)))", ref, ref, ref, ref)
+                        ("return%j", invalid(field, "integer|Long"));
                 break;
             case "float":
             case "double": gen
