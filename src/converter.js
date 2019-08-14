@@ -180,9 +180,9 @@ function genValuePartial_toObject(gen, field, fieldIndex, prop) {
                 ("d%s=m%s", prop, prop);
             else gen
                 ("if(typeof m%s===\"number\")", prop)
-                    ("d%s=o.longs===String?String(m%s):m%s", prop, prop, prop)
+                    ("d%s=m%s", prop, prop)
                 ("else") // Long-like
-                    ("d%s=o.longs===String?util.Long.prototype.toString.call(m%s):o.longs===Number?new util.LongBits(m%s.low>>>0,m%s.high>>>0).toNumber(%s):m%s", prop, prop, prop, prop, isUnsigned ? "true": "", prop);
+                    ("d%s=util.Long.prototype.toNumber.call(m%s)", prop, prop);
             break;
             case "bytes": gen
             ("d%s=o.bytes===String?util.base64.encode(m%s,0,m%s.length):o.bytes===Array?Array.prototype.slice.call(m%s):m%s", prop, prop, prop, prop, prop);
